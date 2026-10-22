@@ -7,6 +7,8 @@ from PySide6.QtWidgets import (
     QGridLayout, QPushButton, QLabel, QFrame, QLineEdit, QSlider, QSizePolicy, QFileDialog
 )
 
+from core.conversions import rgb_to_rgb
+
 class FormattedLineEdit(QLineEdit):
     def __init__(self, on_format, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -25,6 +27,11 @@ class Lab1App(QMainWindow):
         self.setMinimumSize(600, 600)
         
         self.current_file_path = None  # путь к текущему файлу сохранения
+        self.inputs_visible = False     # видимость полей точных значений около ползунков
+        
+        # списки для ползунков и полей ввода точных значений
+        self.sliders_list = []
+        self.exact_inputs_list = []
         
         # верхнее меню
         menubar = self.menuBar()
@@ -120,9 +127,9 @@ class Lab1App(QMainWindow):
         
         # конфиги режимов и их букв
         self.model_configs = {
-            "HSV": ["H", "S", "V"],
             "RGB": ["R", "G", "B"],
             "CMYK": ["C", "M", "Y", "K"],
+            "HSV": ["H", "S", "V"],
             "HLS": ["H", "L", "S"]
         }
         self.model_names = list(self.model_configs.keys())
@@ -159,9 +166,28 @@ class Lab1App(QMainWindow):
         self.components_layout.setContentsMargins(0, 0, 0, 0)
         self.components_layout.setSpacing(8)
         
-        self.update_model_view(initial_model)
         sliders_layout.addWidget(self.components_container, stretch=1)
         
+        # квадратная кнопка с иконкой меню (≡) для открытия точных значений
+        self.toggle_inputs_btn = QPushButton("≡")
+        self.toggle_inputs_btn.setFixedSize(36, 36)
+        self.toggle_inputs_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #000000;
+                color: #C6C6C6;
+                border: none;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 16px;
+            }
+            QPushButton:hover {
+                background-color: #1a1a1a;
+            }
+        """)
+        self.toggle_inputs_btn.clicked.connect(self.toggle_exact_inputs)
+        sliders_layout.addWidget(self.toggle_inputs_btn, alignment=Qt.AlignVCenter)
+        
+        self.update_model_view(initial_model)
         main_layout.addWidget(sliders_container, alignment=Qt.AlignCenter)
         
         # область для ввода RGB и HEX
@@ -221,6 +247,9 @@ class Lab1App(QMainWindow):
         format_layout.addWidget(self.format_toggle_btn)
         
         main_layout.addWidget(format_container, alignment=Qt.AlignCenter)
+        
+        # текущий цвет rgb выбранной ячейки
+        self.current_rgb = (0, 0, 0)
         
         # выбираем первую ячейку по умолчанию
         if self.palette_buttons:
@@ -316,16 +345,28 @@ class Lab1App(QMainWindow):
         self.update_button_style(btn, r, g, b)
         
         # синхронизируем нижнее поле
+        self.current_rgb = (r, g, b)
+        
         if not self.is_hex_mode:
             self.color_input.setText(f"{r} {g} {b}")
         else:
             self.color_input.setText(f"{r:02x}{g:02x}{b:02x}")
         self.update_preview_color(r, g, b)
+        self.update_sliders_from_rgb(r, g, b)
 
     def switch_color_model(self):
         self.current_model_idx = (self.current_model_idx + 1) % len(self.model_names)
         model_name = self.model_names[self.current_model_idx]
         self.update_model_view(model_name)
+        
+        r, g, b = self.current_rgb
+        self.update_sliders_from_rgb(r, g, b)
+
+    def toggle_exact_inputs(self):
+        # переключение видимости полей точных значений
+        self.inputs_visible = not self.inputs_visible
+        for inp in self.exact_inputs_list:
+            inp.setVisible(self.inputs_visible)
 
     def update_model_view(self, model_name):
         letters = self.model_configs[model_name]
@@ -346,7 +387,10 @@ class Lab1App(QMainWindow):
             if item.widget():
                 item.widget().deleteLater()
                 
-        for _ in letters:
+        self.sliders_list.clear()
+        self.exact_inputs_list.clear()
+        
+        for i, letter in enumerate(letters):
             row_w = QWidget()
             row_l = QHBoxLayout(row_w)
             row_l.setContentsMargins(0, 0, 0, 0)
@@ -371,9 +415,90 @@ class Lab1App(QMainWindow):
                     background: #ffffff;
                 }
             """)
-            row_l.addWidget(slider)
+            
+            exact_input = QLineEdit("0")
+            exact_input.setFixedWidth(55)
+            exact_input.setFixedHeight(26)
+            exact_input.setAlignment(Qt.AlignCenter)
+            exact_input.setVisible(self.inputs_visible)
+            exact_input.setStyleSheet(
+                "background-color: #1a1a1a;"
+                "color: #C6C6C6;"
+                "border: 1px solid #2A2A2A;"
+                "border-radius: 3px;"
+                "font-size: 11px;"
+            )
+            
+            slider.valueChanged.connect(lambda val, s=slider, inp=exact_input: self.on_slider_changed(s, inp))
+            exact_input.editingFinished.connect(lambda s=slider, inp=exact_input: self.on_exact_input_finished(s, inp))
+            
+            row_l.addWidget(slider, stretch=1)
+            row_l.addWidget(exact_input)
             
             self.components_layout.addWidget(row_w)
+            self.sliders_list.append(slider)
+            self.exact_inputs_list.append(exact_input)
+
+    def on_slider_changed(self, slider, exact_input):
+        val = slider.value()
+        exact_input.setText(str(val))
+        self.update_color_from_sliders()
+
+    def on_exact_input_finished(self, slider, exact_input):
+        text = exact_input.text().replace(',', '.')
+        try:
+            num = int(round(float(text)))
+            num = max(0, min(255, num))
+            slider.setValue(num)
+            exact_input.setText(str(num))
+        except ValueError:
+            exact_input.setText(str(slider.value()))
+
+    def update_color_from_sliders(self):
+        if not self.sliders_list:
+            return
+            
+        model_name = self.model_names[self.current_model_idx]
+        
+        if model_name == "RGB":
+            r = self.sliders_list[0].value()
+            g = self.sliders_list[1].value()
+            b = self.sliders_list[2].value()
+        else:
+            # для остальных моделей пока простая заглушка под RGB
+            r = self.sliders_list[0].value()
+            g = self.sliders_list[1].value() if len(self.sliders_list) > 1 else 0
+            b = self.sliders_list[2].value() if len(self.sliders_list) > 2 else 0
+
+        r, g, b = rgb_to_rgb(r, g, b)
+        self.current_rgb = (r, g, b)
+        
+        self.update_preview_color(r, g, b)
+        if not self.is_hex_mode:
+            self.color_input.setText(f"{r} {g} {b}")
+        else:
+            self.color_input.setText(f"{r:02x}{g:02x}{b:02x}")
+            
+        if self.selected_btn and self.selected_btn in self.palette_colors:
+            self.palette_colors[self.selected_btn] = (r, g, b)
+            self.update_button_style(self.selected_btn, r, g, b)
+
+    def update_sliders_from_rgb(self, r, g, b):
+        if not self.sliders_list:
+            return
+            
+        for slider in self.sliders_list:
+            slider.blockSignals(True)
+            
+        vals = [r, g, b]
+        for i, slider in enumerate(self.sliders_list):
+            val = vals[i] if i < len(vals) else 0
+            slider.setValue(val)
+            if i < len(self.exact_inputs_list):
+                self.exact_inputs_list[i].setText(str(val))
+                
+        for slider in self.sliders_list:
+            slider.blockSignals(False)
 
     def update_preview_color(self, r, g, b):
         hex_color = f"#{r:02x}{g:02x}{b:02x}"
@@ -424,12 +549,15 @@ class Lab1App(QMainWindow):
             _, r, g, b = self.parse_hex(text)
             
         # обновляем превью
+        self.current_rgb = (r, g, b)
         self.update_preview_color(r, g, b)
         
         # обновляем цвет на палитре
         if self.selected_btn and self.selected_btn in self.palette_colors:
             self.palette_colors[self.selected_btn] = (r, g, b)
             self.update_button_style(self.selected_btn, r, g, b)
+            
+        self.update_sliders_from_rgb(r, g, b)
 
     def apply_formatting_and_finish(self):
         text = self.color_input.text()
@@ -440,6 +568,7 @@ class Lab1App(QMainWindow):
             if self.selected_btn and self.selected_btn in self.palette_colors:
                 self.palette_colors[self.selected_btn] = (r, g, b)
                 self.update_button_style(self.selected_btn, r, g, b)
+            self.update_sliders_from_rgb(r, g, b)
         else:
             clean_hex, r, g, b = self.parse_hex(text)
             self.color_input.setText(clean_hex)
@@ -447,6 +576,7 @@ class Lab1App(QMainWindow):
             if self.selected_btn and self.selected_btn in self.palette_colors:
                 self.palette_colors[self.selected_btn] = (r, g, b)
                 self.update_button_style(self.selected_btn, r, g, b)
+            self.update_sliders_from_rgb(r, g, b)
 
     def toggle_color_format(self):
         text = self.color_input.text()
