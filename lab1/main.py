@@ -7,7 +7,11 @@ from PySide6.QtWidgets import (
     QGridLayout, QPushButton, QLabel, QFrame, QLineEdit, QSlider, QSizePolicy, QFileDialog
 )
 
-from core.conversions import rgb_to_rgb
+from core.conversions import (
+    rgb_to_cmyk, cmyk_to_rgb,
+    rgb_to_hsv, hsv_to_rgb,
+    rgb_to_hls, hls_to_rgb
+)
 
 class FormattedLineEdit(QLineEdit):
     def __init__(self, on_format, *args, **kwargs):
@@ -397,7 +401,20 @@ class Lab1App(QMainWindow):
             row_l.setSpacing(8)
             
             slider = QSlider(Qt.Horizontal)
-            slider.setRange(0, 255)
+            is_float_slider = False
+            
+            if model_name == "RGB":
+                slider.setRange(0, 255)
+            elif model_name == "CMYK":
+                slider.setRange(0, 1000)
+                is_float_slider = True
+            elif model_name in ("HSV", "HLS"):
+                if letter == "H":
+                    slider.setRange(0, 360)
+                else:
+                    slider.setRange(0, 100)
+                    is_float_slider = True
+                    
             slider.setStyleSheet("""
                 QSlider::groove:horizontal {
                     height: 5px;
@@ -416,7 +433,8 @@ class Lab1App(QMainWindow):
                 }
             """)
             
-            exact_input = QLineEdit("0")
+            default_text = "0.00" if is_float_slider else "0"
+            exact_input = QLineEdit(default_text)
             exact_input.setFixedWidth(55)
             exact_input.setFixedHeight(26)
             exact_input.setAlignment(Qt.AlignCenter)
@@ -429,8 +447,8 @@ class Lab1App(QMainWindow):
                 "font-size: 11px;"
             )
             
-            slider.valueChanged.connect(lambda val, s=slider, inp=exact_input: self.on_slider_changed(s, inp))
-            exact_input.editingFinished.connect(lambda s=slider, inp=exact_input: self.on_exact_input_finished(s, inp))
+            slider.valueChanged.connect(lambda val, s=slider, inp=exact_input, f=is_float_slider: self.on_slider_changed(s, inp, f))
+            exact_input.editingFinished.connect(lambda s=slider, inp=exact_input, f=is_float_slider: self.on_exact_input_finished(s, inp, f))
             
             row_l.addWidget(slider, stretch=1)
             row_l.addWidget(exact_input)
@@ -439,20 +457,42 @@ class Lab1App(QMainWindow):
             self.sliders_list.append(slider)
             self.exact_inputs_list.append(exact_input)
 
-    def on_slider_changed(self, slider, exact_input):
+    def on_slider_changed(self, slider, exact_input, is_float):
         val = slider.value()
-        exact_input.setText(str(val))
+        if is_float:
+            if slider.maximum() == 1000:
+                f_val = val / 1000.0
+            else:
+                f_val = val / 100.0
+            exact_input.setText(f"{f_val:.2f}")
+        else:
+            exact_input.setText(str(val))
         self.update_color_from_sliders()
 
-    def on_exact_input_finished(self, slider, exact_input):
+    def on_exact_input_finished(self, slider, exact_input, is_float):
         text = exact_input.text().replace(',', '.')
         try:
-            num = int(round(float(text)))
-            num = max(0, min(255, num))
-            slider.setValue(num)
-            exact_input.setText(str(num))
+            num = float(text)
+            if is_float:
+                num = max(0.0, min(1.0, num))
+                if slider.maximum() == 1000:
+                    slider.setValue(int(round(num * 1000)))
+                else:
+                    slider.setValue(int(round(num * 100)))
+                exact_input.setText(f"{num:.2f}")
+            else:
+                num = int(round(num))
+                num = max(slider.minimum(), min(slider.maximum(), num))
+                slider.setValue(num)
+                exact_input.setText(str(num))
         except ValueError:
-            exact_input.setText(str(slider.value()))
+            if is_float:
+                if slider.maximum() == 1000:
+                    exact_input.setText(f"{slider.value() / 1000.0:.2f}")
+                else:
+                    exact_input.setText(f"{slider.value() / 100.0:.2f}")
+            else:
+                exact_input.setText(str(slider.value()))
 
     def update_color_from_sliders(self):
         if not self.sliders_list:
@@ -464,15 +504,26 @@ class Lab1App(QMainWindow):
             r = self.sliders_list[0].value()
             g = self.sliders_list[1].value()
             b = self.sliders_list[2].value()
+        elif model_name == "CMYK":
+            c = self.sliders_list[0].value() / 1000.0
+            m = self.sliders_list[1].value() / 1000.0
+            y = self.sliders_list[2].value() / 1000.0
+            k = self.sliders_list[3].value() / 1000.0
+            r, g, b = cmyk_to_rgb(c, m, y, k)
+        elif model_name == "HSV":
+            h = self.sliders_list[0].value()
+            s = self.sliders_list[1].value() / 100.0
+            v = self.sliders_list[2].value() / 100.0
+            r, g, b = hsv_to_rgb(h, s, v)
+        elif model_name == "HLS":
+            h = self.sliders_list[0].value()
+            l = self.sliders_list[1].value() / 100.0
+            s = self.sliders_list[2].value() / 100.0
+            r, g, b = hls_to_rgb(h, l, s)
         else:
-            # для остальных моделей пока простая заглушка под RGB
-            r = self.sliders_list[0].value()
-            g = self.sliders_list[1].value() if len(self.sliders_list) > 1 else 0
-            b = self.sliders_list[2].value() if len(self.sliders_list) > 2 else 0
+            r, g, b = 0, 0, 0
 
-        r, g, b = rgb_to_rgb(r, g, b)
         self.current_rgb = (r, g, b)
-        
         self.update_preview_color(r, g, b)
         if not self.is_hex_mode:
             self.color_input.setText(f"{r} {g} {b}")
@@ -487,15 +538,48 @@ class Lab1App(QMainWindow):
         if not self.sliders_list:
             return
             
+        model_name = self.model_names[self.current_model_idx]
+        
         for slider in self.sliders_list:
             slider.blockSignals(True)
             
-        vals = [r, g, b]
-        for i, slider in enumerate(self.sliders_list):
-            val = vals[i] if i < len(vals) else 0
-            slider.setValue(val)
-            if i < len(self.exact_inputs_list):
-                self.exact_inputs_list[i].setText(str(val))
+        if model_name == "RGB":
+            vals = [r, g, b]
+            for i, val in enumerate(vals):
+                self.sliders_list[i].setValue(val)
+                if i < len(self.exact_inputs_list):
+                    self.exact_inputs_list[i].setText(str(val))
+        elif model_name == "CMYK":
+            c, m, y, k = rgb_to_cmyk(r, g, b)
+            vals = [c, m, y, k]
+            for i, v in enumerate(vals):
+                self.sliders_list[i].setValue(int(round(v * 1000)))
+                if i < len(self.exact_inputs_list):
+                    self.exact_inputs_list[i].setText(f"{v:.2f}")
+        elif model_name == "HSV":
+            h, s, v = rgb_to_hsv(r, g, b)
+            vals = [int(round(h)), s, v]
+            for i, v_val in enumerate(vals):
+                if i == 0:
+                    self.sliders_list[i].setValue(v_val)
+                    if i < len(self.exact_inputs_list):
+                        self.exact_inputs_list[i].setText(str(v_val))
+                else:
+                    self.sliders_list[i].setValue(int(round(v_val * 100)))
+                    if i < len(self.exact_inputs_list):
+                        self.exact_inputs_list[i].setText(f"{v_val:.2f}")
+        elif model_name == "HLS":
+            h, l, s = rgb_to_hls(r, g, b)
+            vals = [int(round(h)), l, s]
+            for i, v_val in enumerate(vals):
+                if i == 0:
+                    self.sliders_list[i].setValue(v_val)
+                    if i < len(self.exact_inputs_list):
+                        self.exact_inputs_list[i].setText(str(v_val))
+                else:
+                    self.sliders_list[i].setValue(int(round(v_val * 100)))
+                    if i < len(self.exact_inputs_list):
+                        self.exact_inputs_list[i].setText(f"{v_val:.2f}")
                 
         for slider in self.sliders_list:
             slider.blockSignals(False)
