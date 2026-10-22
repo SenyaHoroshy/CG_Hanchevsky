@@ -1,10 +1,10 @@
 import sys
 import re
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QPalette, QColor
+from PySide6.QtGui import QPalette, QColor, QAction
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QGridLayout, QPushButton, QLabel, QFrame, QLineEdit, QSlider, QSizePolicy
+    QGridLayout, QPushButton, QLabel, QFrame, QLineEdit, QSlider, QSizePolicy, QFileDialog
 )
 
 class FormattedLineEdit(QLineEdit):
@@ -23,6 +23,35 @@ class Lab1App(QMainWindow):
         super().__init__()
         self.setWindowTitle("Lab 1")
         self.setMinimumSize(600, 600)
+        
+        self.current_file_path = None  # путь к текущему файлу сохранения
+        
+        # верхнее меню
+        menubar = self.menuBar()
+        menubar.setNativeMenuBar(False)
+        file_menu = menubar.addMenu("Файл")
+        
+        new_action = QAction("Новая палитра", self)
+        new_action.triggered.connect(self.new_palette)
+        file_menu.addAction(new_action)
+        
+        open_action = QAction("Открыть...", self)
+        open_action.triggered.connect(self.open_palette)
+        file_menu.addAction(open_action)
+        
+        save_action = QAction("Сохранить", self)
+        save_action.triggered.connect(self.save_palette)
+        file_menu.addAction(save_action)
+        
+        save_as_action = QAction("Сохранить как...", self)
+        save_as_action.triggered.connect(self.save_palette_as)
+        file_menu.addAction(save_as_action)
+        
+        file_menu.addSeparator()
+        
+        exit_action = QAction("Выход", self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
         
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -61,14 +90,14 @@ class Lab1App(QMainWindow):
                 btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
                 btn.setMinimumSize(38, 44)
                 
-                # Изначально все ячейки черные
+                # изначально все ячейки черные
                 self.palette_colors[btn] = (0, 0, 0)
                 btn.setStyleSheet(
                     "background-color: #000000;"
                     "border: 1px solid #2A2A2A;"
                     "border-radius: 0px;"
                 )
-                # Подключаем клик по ячейке палитры
+                # подключаем клик по ячейке палитры
                 btn.clicked.connect(lambda checked=False, b=btn: self.select_palette_cell(b))
                 
                 palette_layout.addWidget(btn, r + 1, c + 1)
@@ -196,6 +225,70 @@ class Lab1App(QMainWindow):
         # выбираем первую ячейку по умолчанию
         if self.palette_buttons:
             self.select_palette_cell(self.palette_buttons[0])
+
+    def new_palette(self):
+        # очищаем палитру и сбрасываем путь
+        self.current_file_path = None
+        for btn in self.palette_buttons:
+            self.palette_colors[btn] = (0, 0, 0)
+            self.update_button_style(btn, 0, 0, 0)
+        if self.palette_buttons:
+            self.select_palette_cell(self.palette_buttons[0])
+
+    def open_palette(self):
+        # диалог выбора файла для открытия
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Открыть палитру", "", "Text Files (*.txt);;All Files (*)"
+        )
+        if file_path:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    lines = [line.strip() for line in f.readlines() if line.strip()]
+                
+                # читаем и применяем цвета к ячейкам палитры
+                for i, btn in enumerate(self.palette_buttons):
+                    if i < len(lines):
+                        _, r, g, b = self.parse_hex(lines[i])
+                        self.palette_colors[btn] = (r, g, b)
+                        self.update_button_style(btn, r, g, b)
+                    else:
+                        self.palette_colors[btn] = (0, 0, 0)
+                        self.update_button_style(btn, 0, 0, 0)
+                
+                self.current_file_path = file_path
+                if self.palette_buttons:
+                    self.select_palette_cell(self.palette_buttons[0])
+            except Exception as e:
+                print(f"ошибка при открытии файла: {e}")
+
+    def save_palette(self):
+        # сохраняем по текущему пути
+        if not self.current_file_path:
+            self.save_palette_as()
+        else:
+            self._write_palette_to_file(self.current_file_path)
+
+    def save_palette_as(self):
+        # диалог сохранения файла
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Сохранить палитру", "", "Text Files (*.txt);;All Files (*)"
+        )
+        if file_path:
+            if not file_path.lower().endswith('.txt'):
+                file_path += '.txt'
+            self.current_file_path = file_path
+            self._write_palette_to_file(self.current_file_path)
+
+    def _write_palette_to_file(self, path):
+        # запись hex-значений ячеек в файл
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                for btn in self.palette_buttons:
+                    r, g, b = self.palette_colors[btn]
+                    hex_val = f"{r:02x}{g:02x}{b:02x}"
+                    f.write(hex_val + "\n")
+        except Exception as e:
+            print(f"ошибка при сохранении файла: {e}")
 
     def update_button_style(self, btn, r, g, b):
         hex_c = f"#{r:02x}{g:02x}{b:02x}"
