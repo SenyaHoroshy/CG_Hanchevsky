@@ -43,8 +43,11 @@ class Lab1App(QMainWindow):
             col_lbl.setStyleSheet("color: #C6C6C6; font-size: 11px;")
             palette_layout.addWidget(col_lbl, 0, c + 1)
             
-        # заголовки строк
+        # заголовки строк и ячейки палитры
         self.palette_buttons = []
+        self.palette_colors = {}  # словарик для хранения цветов ячеек (r, g, b)
+        self.selected_btn = None   # текущая выбранная ячейка
+        
         rows, cols = 4, 10
         
         for r in range(rows):
@@ -57,11 +60,17 @@ class Lab1App(QMainWindow):
                 btn = QPushButton()
                 btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
                 btn.setMinimumSize(38, 44)
+                
+                # Изначально все ячейки черные
+                self.palette_colors[btn] = (0, 0, 0)
                 btn.setStyleSheet(
                     "background-color: #000000;"
                     "border: 1px solid #2A2A2A;"
                     "border-radius: 0px;"
                 )
+                # Подключаем клик по ячейке палитры
+                btn.clicked.connect(lambda checked=False, b=btn: self.select_palette_cell(b))
+                
                 palette_layout.addWidget(btn, r + 1, c + 1)
                 self.palette_buttons.append(btn)
                 
@@ -82,9 +91,9 @@ class Lab1App(QMainWindow):
         
         # конфиги режимов и их букв
         self.model_configs = {
+            "HSV": ["H", "S", "V"],
             "RGB": ["R", "G", "B"],
             "CMYK": ["C", "M", "Y", "K"],
-            "HSV": ["H", "S", "V"],
             "HLS": ["H", "L", "S"]
         }
         self.model_names = list(self.model_configs.keys())
@@ -184,7 +193,41 @@ class Lab1App(QMainWindow):
         
         main_layout.addWidget(format_container, alignment=Qt.AlignCenter)
         
-        self.update_preview_color(0, 0, 0)
+        # выбираем первую ячейку по умолчанию
+        if self.palette_buttons:
+            self.select_palette_cell(self.palette_buttons[0])
+
+    def update_button_style(self, btn, r, g, b):
+        hex_c = f"#{r:02x}{g:02x}{b:02x}"
+        if btn == self.selected_btn:
+            border_style = "border: 2px solid #ffffff;"
+        else:
+            border_style = "border: 1px solid #2A2A2A;"
+        
+        btn.setStyleSheet(
+            f"background-color: {hex_c};"
+            f"{border_style}"
+            "border-radius: 0px;"
+        )
+
+    def select_palette_cell(self, btn):
+        old_btn = self.selected_btn
+        self.selected_btn = btn
+        
+        # обновление палитры
+        if old_btn and old_btn in self.palette_colors:
+            r_old, g_old, b_old = self.palette_colors[old_btn]
+            self.update_button_style(old_btn, r_old, g_old, b_old)
+            
+        r, g, b = self.palette_colors[btn]
+        self.update_button_style(btn, r, g, b)
+        
+        # синхронизируем нижнее поле
+        if not self.is_hex_mode:
+            self.color_input.setText(f"{r} {g} {b}")
+        else:
+            self.color_input.setText(f"{r:02x}{g:02x}{b:02x}")
+        self.update_preview_color(r, g, b)
 
     def switch_color_model(self):
         self.current_model_idx = (self.current_model_idx + 1) % len(self.model_names)
@@ -284,10 +327,16 @@ class Lab1App(QMainWindow):
         text = self.color_input.text()
         if not self.is_hex_mode:
             r, g, b = self.parse_rgb(text)
-            self.update_preview_color(r, g, b)
         else:
             _, r, g, b = self.parse_hex(text)
-            self.update_preview_color(r, g, b)
+            
+        # обновляем превью
+        self.update_preview_color(r, g, b)
+        
+        # обновляем цвет на палитре
+        if self.selected_btn and self.selected_btn in self.palette_colors:
+            self.palette_colors[self.selected_btn] = (r, g, b)
+            self.update_button_style(self.selected_btn, r, g, b)
 
     def apply_formatting_and_finish(self):
         text = self.color_input.text()
@@ -295,10 +344,16 @@ class Lab1App(QMainWindow):
             r, g, b = self.parse_rgb(text)
             self.color_input.setText(f"{r} {g} {b}")
             self.update_preview_color(r, g, b)
+            if self.selected_btn and self.selected_btn in self.palette_colors:
+                self.palette_colors[self.selected_btn] = (r, g, b)
+                self.update_button_style(self.selected_btn, r, g, b)
         else:
             clean_hex, r, g, b = self.parse_hex(text)
             self.color_input.setText(clean_hex)
             self.update_preview_color(r, g, b)
+            if self.selected_btn and self.selected_btn in self.palette_colors:
+                self.palette_colors[self.selected_btn] = (r, g, b)
+                self.update_button_style(self.selected_btn, r, g, b)
 
     def toggle_color_format(self):
         text = self.color_input.text()
