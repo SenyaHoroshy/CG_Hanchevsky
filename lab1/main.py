@@ -260,7 +260,6 @@ class Lab1App(QMainWindow):
             self.select_palette_cell(self.palette_buttons[0])
 
     def new_palette(self):
-        # очищаем палитру и сбрасываем путь
         self.current_file_path = None
         for btn in self.palette_buttons:
             self.palette_colors[btn] = (0, 0, 0)
@@ -269,7 +268,6 @@ class Lab1App(QMainWindow):
             self.select_palette_cell(self.palette_buttons[0])
 
     def open_palette(self):
-        # диалог выбора файла для открытия
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Открыть палитру", "", "Text Files (*.txt);;All Files (*)"
         )
@@ -278,7 +276,6 @@ class Lab1App(QMainWindow):
                 with open(file_path, 'r', encoding='utf-8') as f:
                     lines = [line.strip() for line in f.readlines() if line.strip()]
                 
-                # читаем и применяем цвета к ячейкам палитры
                 for i, btn in enumerate(self.palette_buttons):
                     if i < len(lines):
                         _, r, g, b = self.parse_hex(lines[i])
@@ -295,14 +292,12 @@ class Lab1App(QMainWindow):
                 print(f"ошибка при открытии файла: {e}")
 
     def save_palette(self):
-        # сохраняем по текущему пути
         if not self.current_file_path:
             self.save_palette_as()
         else:
             self._write_palette_to_file(self.current_file_path)
 
     def save_palette_as(self):
-        # диалог сохранения файла
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Сохранить палитру", "", "Text Files (*.txt);;All Files (*)"
         )
@@ -313,7 +308,6 @@ class Lab1App(QMainWindow):
             self._write_palette_to_file(self.current_file_path)
 
     def _write_palette_to_file(self, path):
-        # запись hex-значений ячеек в файл
         try:
             with open(path, 'w', encoding='utf-8') as f:
                 for btn in self.palette_buttons:
@@ -340,7 +334,6 @@ class Lab1App(QMainWindow):
         old_btn = self.selected_btn
         self.selected_btn = btn
         
-        # обновление палитры
         if old_btn and old_btn in self.palette_colors:
             r_old, g_old, b_old = self.palette_colors[old_btn]
             self.update_button_style(old_btn, r_old, g_old, b_old)
@@ -348,7 +341,6 @@ class Lab1App(QMainWindow):
         r, g, b = self.palette_colors[btn]
         self.update_button_style(btn, r, g, b)
         
-        # синхронизируем нижнее поле
         self.current_rgb = (r, g, b)
         
         if not self.is_hex_mode:
@@ -367,7 +359,6 @@ class Lab1App(QMainWindow):
         self.update_sliders_from_rgb(r, g, b)
 
     def toggle_exact_inputs(self):
-        # переключение видимости полей точных значений
         self.inputs_visible = not self.inputs_visible
         for inp in self.exact_inputs_list:
             inp.setVisible(self.inputs_visible)
@@ -415,12 +406,8 @@ class Lab1App(QMainWindow):
                     slider.setRange(0, 100)
                     is_float_slider = True
                     
+            # Базовый стиль ручки ползунка (фон желобка будет динамически обновляться)
             slider.setStyleSheet("""
-                QSlider::groove:horizontal {
-                    height: 5px;
-                    background: #1e1e1e;
-                    border-radius: 2px;
-                }
                 QSlider::handle:horizontal {
                     background: #C6C6C6;
                     width: 14px;
@@ -533,6 +520,9 @@ class Lab1App(QMainWindow):
         if self.selected_btn and self.selected_btn in self.palette_colors:
             self.palette_colors[self.selected_btn] = (r, g, b)
             self.update_button_style(self.selected_btn, r, g, b)
+            
+        # Обновляем градиенты остальных ползунков в реальном времени
+        self.update_slider_gradients()
 
     def update_sliders_from_rgb(self, r, g, b):
         if not self.sliders_list:
@@ -583,6 +573,122 @@ class Lab1App(QMainWindow):
                 
         for slider in self.sliders_list:
             slider.blockSignals(False)
+            
+        self.update_slider_gradients()
+
+    def update_slider_gradients(self):
+        if not self.sliders_list:
+            return
+            
+        model_name = self.model_names[self.current_model_idx]
+        
+        if model_name == "RGB":
+            r = self.sliders_list[0].value()
+            g = self.sliders_list[1].value()
+            b = self.sliders_list[2].value()
+            
+            self.set_slider_gradient(0, f"rgb(0,{g},{b})", f"rgb(255,{g},{b})")
+            self.set_slider_gradient(1, f"rgb({r},0,{b})", f"rgb({r},255,{b})")
+            self.set_slider_gradient(2, f"rgb({r},{g},0)", f"rgb({r},{g},255)")
+            
+        elif model_name == "CMYK":
+            c = self.sliders_list[0].value() / 1000.0
+            m = self.sliders_list[1].value() / 1000.0
+            y = self.sliders_list[2].value() / 1000.0
+            k = self.sliders_list[3].value() / 1000.0
+            
+            self.set_slider_gradient(0, f"rgb{cmyk_to_rgb(0, m, y, k)}", f"rgb{cmyk_to_rgb(1, m, y, k)}")
+            self.set_slider_gradient(1, f"rgb{cmyk_to_rgb(c, 0, y, k)}", f"rgb{cmyk_to_rgb(c, 1, y, k)}")
+            self.set_slider_gradient(2, f"rgb{cmyk_to_rgb(c, m, 0, k)}", f"rgb{cmyk_to_rgb(c, m, 1, k)}")
+            self.set_slider_gradient(3, f"rgb{cmyk_to_rgb(c, m, y, 0)}", f"rgb{cmyk_to_rgb(c, m, y, 1)}")
+            
+        elif model_name == "HSV":
+            h = self.sliders_list[0].value()
+            s = self.sliders_list[1].value() / 100.0
+            v = self.sliders_list[2].value() / 100.0
+            
+            # Ползунок H: радужный многоточечный спектр (0 - 360°)
+            stops = []
+            for deg in range(0, 361, 60):
+                col = hsv_to_rgb(deg, s, v)
+                stops.append(f"stop: {deg/360.0:.3f} rgb({col[0]},{col[1]},{col[2]})")
+            self.set_slider_multi_gradient(0, stops)
+            
+            # Ползунок S
+            self.set_slider_gradient(1, f"rgb{hsv_to_rgb(h, 0.0, v)}", f"rgb{hsv_to_rgb(h, 1.0, v)}")
+            # Ползунок V
+            self.set_slider_gradient(2, f"rgb{hsv_to_rgb(h, s, 0.0)}", f"rgb{hsv_to_rgb(h, s, 1.0)}")
+            
+        elif model_name == "HLS":
+            h = self.sliders_list[0].value()
+            l = self.sliders_list[1].value() / 100.0
+            s = self.sliders_list[2].value() / 100.0
+            
+            # Ползунок H: радужный спектр
+            stops = []
+            for deg in range(0, 361, 60):
+                col = hls_to_rgb(deg, l, s)
+                stops.append(f"stop: {deg/360.0:.3f} rgb({col[0]},{col[1]},{col[2]})")
+            self.set_slider_multi_gradient(0, stops)
+            
+            # Ползунок L: от черного (L=0) через чистый цвет (L=0.5) до белого (L=1.0)
+            c_black = "rgb(0,0,0)"
+            c_pure = f"rgb{hls_to_rgb(h, 0.5, s)}"
+            c_white = "rgb(255,255,255)"
+            stops_l = [
+                "stop: 0.0 " + c_black,
+                "stop: 0.5 " + c_pure,
+                "stop: 1.0 " + c_white
+            ]
+            self.set_slider_multi_gradient(1, stops_l)
+            
+            # Ползунок S
+            self.set_slider_gradient(2, f"rgb{hls_to_rgb(h, l, 0.0)}", f"rgb{hls_to_rgb(h, l, 1.0)}")
+
+    def set_slider_gradient(self, idx, col0, col1):
+        if idx >= len(self.sliders_list):
+            return
+        slider = self.sliders_list[idx]
+        slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                height: 6px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop: 0 {col0}, stop: 1 {col1});
+                border-radius: 3px;
+            }}
+            QSlider::handle:horizontal {{
+                background: #C6C6C6;
+                width: 14px;
+                height: 14px;
+                margin: -5px 0;
+                border-radius: 7px;
+            }}
+            QSlider::handle:horizontal:hover {{
+                background: #ffffff;
+            }}
+        """)
+
+    def set_slider_multi_gradient(self, idx, stops_list):
+        if idx >= len(self.sliders_list):
+            return
+        slider = self.sliders_list[idx]
+        stops_str = ", ".join(stops_list)
+        slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                height: 6px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, {stops_str});
+                border-radius: 3px;
+            }}
+            QSlider::handle:horizontal {{
+                background: #C6C6C6;
+                width: 14px;
+                height: 14px;
+                margin: -5px 0;
+                border-radius: 7px;
+            }}
+            QSlider::handle:horizontal:hover {{
+                background: #ffffff;
+            }}
+        """)
 
     def update_preview_color(self, r, g, b):
         hex_color = f"#{r:02x}{g:02x}{b:02x}"
@@ -632,11 +738,9 @@ class Lab1App(QMainWindow):
         else:
             _, r, g, b = self.parse_hex(text)
             
-        # обновляем превью
         self.current_rgb = (r, g, b)
         self.update_preview_color(r, g, b)
         
-        # обновляем цвет на палитре
         if self.selected_btn and self.selected_btn in self.palette_colors:
             self.palette_colors[self.selected_btn] = (r, g, b)
             self.update_button_style(self.selected_btn, r, g, b)
