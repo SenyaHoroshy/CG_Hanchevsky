@@ -57,10 +57,9 @@ def detect_edges(image: np.ndarray) -> np.ndarray:
 
 def colorize_segments(image_result: np.ndarray) -> np.ndarray:
     """
-    Корректная цветная сегментация без слияния объектов:
-    1. Пороговая обработка (Отсу) + нормализация (фон = 0, объекты = 255).
-    2. Удаление мелкого мусора (морфологическое открытие) без объединения соседей.
-    3. Поиск связных компонент и раскраска.
+    Региональная цветная сегментация:
+    Строит сплошные цветные области на основе пороговой обработки (Отсу), 
+    сохраняя черные зазоры между объектами без их слияния.
     """
     if len(image_result.shape) == 3:
         gray = cv2.cvtColor(image_result, cv2.COLOR_BGR2GRAY)
@@ -70,23 +69,24 @@ def colorize_segments(image_result: np.ndarray) -> np.ndarray:
     if np.max(gray) == np.min(gray):
         return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
         
-    # Шаг 1: Пороговая обработка методом Отсу
+    # Шаг 1: Глобальная пороговая обработка методом Отсу для получения сплошных зон
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     
-    # Шаг 2: Проверяем углы, чтобы фон был черным (0), а объекты белыми (255)
+    # Шаг 2: Проверка углов для гарантии того, что фон — черный (0), а объекты — белые (255)
     h, w = thresh.shape
     corner_pixels = [thresh[0, 0], thresh[0, w-1], thresh[h-1, 0], thresh[h-1, w-1]]
     if np.mean(corner_pixels) > 127:
         thresh = cv2.bitwise_not(thresh)
         
-    # Шаг 3: Мягкая фильтрация шумов (морфологическое открытие), сохраняющая зазоры
+    # Шаг 3: Минимальное удаление пиксельного мусора (MORPH_OPEN), 
+    # которое НЕ склеивает соседние объекты и оставляет черные зазоры нетронутыми.
     kernel = np.ones((3, 3), np.uint8)
-    cleaned = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+    cleaned = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
     
-    # Шаг 4: Поиск связных компонент по очищенной маске
+    # Шаг 4: Поиск связных компонент по чистым сплошным объектам
     num_labels, labels = cv2.connectedComponents(cleaned)
     
-    # Шаг 5: Генерация палитры (фон — черный, объекты — яркие цвета)
+    # Шаг 5: Генерация яркой палитры (фон строго черный, объекты — цветные)
     np.random.seed(42)
     colors = np.random.randint(50, 255, size=(num_labels, 3), dtype=np.uint8)
     if num_labels > 0:
