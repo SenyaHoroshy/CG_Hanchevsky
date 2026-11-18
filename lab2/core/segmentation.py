@@ -16,7 +16,7 @@ def detect_points(image: np.ndarray) -> np.ndarray:
     return cv2.normalize(result, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
 def detect_lines(image: np.ndarray, direction: str = 'horizontal') -> np.ndarray:
-    """Обнаружение линий по заданному направлению (плавные оттенки серого)."""
+    """Обнаружение линий по заданному направлению"""
     if len(image.shape) == 3:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     else:
@@ -29,7 +29,7 @@ def detect_lines(image: np.ndarray, direction: str = 'horizontal') -> np.ndarray
         'vertical': np.array([[-1,  2, -1],
                                [-1,  2, -1],
                                [-1,  2, -1]], dtype=np.float32),
-        'diag_43': np.array([[ 2, -1, -1],
+        'diag_45': np.array([[ 2, -1, -1],
                               [-1,  2, -1],
                               [-1, -1,  2]], dtype=np.float32),
         'diag_135': np.array([[-1, -1,  2],
@@ -56,11 +56,6 @@ def detect_edges(image: np.ndarray) -> np.ndarray:
     return cv2.normalize(magnitude, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
 def colorize_segments(image_result: np.ndarray) -> np.ndarray:
-    """
-    Региональная цветная сегментация:
-    Строит сплошные цветные области на основе пороговой обработки (Отсу), 
-    сохраняя черные зазоры между объектами без их слияния.
-    """
     if len(image_result.shape) == 3:
         gray = cv2.cvtColor(image_result, cv2.COLOR_BGR2GRAY)
     else:
@@ -69,28 +64,28 @@ def colorize_segments(image_result: np.ndarray) -> np.ndarray:
     if np.max(gray) == np.min(gray):
         return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
         
-    # Шаг 1: Глобальная пороговая обработка методом Отсу для получения сплошных зон
+    # Глобальная пороговая обработка методом Отсу для получения сплошных зон
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     
-    # Шаг 2: Проверка углов для гарантии того, что фон — черный (0), а объекты — белые (255)
+    # Проверка углов для гарантии того, что фон — черный (0), а объекты — белые (255)
     h, w = thresh.shape
     corner_pixels = [thresh[0, 0], thresh[0, w-1], thresh[h-1, 0], thresh[h-1, w-1]]
     if np.mean(corner_pixels) > 127:
         thresh = cv2.bitwise_not(thresh)
         
-    # Шаг 3: Минимальное удаление пиксельного мусора (MORPH_OPEN), 
+    # Минимальное удаление пиксельного мусора (MORPH_OPEN), 
     # которое НЕ склеивает соседние объекты и оставляет черные зазоры нетронутыми.
     kernel = np.ones((3, 3), np.uint8)
     cleaned = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
     
-    # Шаг 4: Поиск связных компонент по чистым сплошным объектам
+    # Поиск связных компонент по чистым сплошным объектам
     num_labels, labels = cv2.connectedComponents(cleaned)
     
-    # Шаг 5: Генерация яркой палитры (фон строго черный, объекты — цветные)
+    # Генерация яркой палитры (фон строго черный, объекты — цветные)
     np.random.seed(42)
     colors = np.random.randint(50, 255, size=(num_labels, 3), dtype=np.uint8)
     if num_labels > 0:
-        colors[0] = [0, 0, 0]  # Фон — черный
+        colors[0] = [0, 0, 0]
         
     colored = colors[labels]
     return colored

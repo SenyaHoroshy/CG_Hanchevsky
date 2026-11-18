@@ -12,7 +12,6 @@ from core.segmentation import detect_points, detect_lines, detect_edges, coloriz
 from core.thresholding import global_threshold_otsu, global_threshold_entropy
 
 class ScalableImageLabel(QLabel):
-    """Метка для автоматического пропорционального масштабирования изображения."""
     def __init__(self):
         super().__init__()
         self.setAlignment(Qt.AlignCenter)
@@ -55,7 +54,6 @@ class Lab2App(QMainWindow):
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(15)
         
-        # 1. Левая панель управления
         control_panel = QWidget()
         control_panel.setFixedWidth(300)
         control_layout = QVBoxLayout(control_panel)
@@ -76,7 +74,7 @@ class Lab2App(QMainWindow):
             "Обнаружение точек (Лапласиан)",
             "Линии: Горизонтальные",
             "Линии: Вертикальные",
-            "Линии: Диагональ (+43°)",
+            "Линии: Диагональ (45°)",
             "Линии: Диагональ (135°)",
             "Перепады яркости (Границы Собеля)"
         ])
@@ -88,7 +86,6 @@ class Lab2App(QMainWindow):
         seg_layout.addWidget(self.btn_apply_seg)
         control_layout.addWidget(seg_group)
         
-        # Группа пороговой обработки
         thresh_group = QGroupBox("Глобальная пороговая обработка")
         thresh_layout = QVBoxLayout(thresh_group)
         
@@ -114,7 +111,6 @@ class Lab2App(QMainWindow):
         control_layout.addStretch()
         main_layout.addWidget(control_panel)
         
-        # 2. Правая область: Сплиттер на ТРИ экрана
         images_splitter = QSplitter(Qt.Horizontal)
         
         # Экран 1: Оригинал
@@ -206,7 +202,7 @@ class Lab2App(QMainWindow):
             self.processed_image = detect_lines(self.current_image, 'vertical')
             self.info_label.setText("Сегментация: вертикальные линии")
         elif idx == 3:
-            self.processed_image = detect_lines(self.current_image, 'diag_43')
+            self.processed_image = detect_lines(self.current_image, 'diag_45')
             self.info_label.setText("Сегментация: диагональные линии (+43°)")
         elif idx == 4:
             self.processed_image = detect_lines(self.current_image, 'diag_135')
