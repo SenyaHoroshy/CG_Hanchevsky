@@ -8,41 +8,50 @@ def global_threshold_otsu(image: np.ndarray) -> tuple[np.ndarray, float]:
     else:
         gray = image.copy()
         
-    # Вычисление порога методом Отсу из OpenCV
     thresh_val, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     return binary, float(thresh_val)
 
-def global_threshold_iterative(image: np.ndarray, tolerance: float = 0.5, max_iter: int = 50) -> tuple[np.ndarray, float]:
-    """
-    Глобальная пороговая обработка итеративным методом по гистограмме (из лекции):
-    1. Выбрать начальную оценку t (например, средняя яркость).
-    2. Разделить изображение на две группы G1 (> t) и G2 (<= t).
-    3. Вычислить новые средние значения m1 и m2 для этих групп.
-    4. Вычислить новый порог t = (m1 + m2) / 2.
-    5. Повторять до тех пор, пока разница порогов меньше tolerance.
-    """
+def global_threshold_entropy(image: np.ndarray) -> tuple[np.ndarray, float]:
+    """Глобальная пороговая обработка на основе энтропии гистограммы (метод Капура)."""
     if len(image.shape) == 3:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     else:
         gray = image.copy()
         
-    # Начальный порог — среднее значение яркости по изображению
-    t = float(np.mean(gray))
+    hist, _ = np.histogram(gray, bins=256, range=(0, 256))
+    hist = hist.astype(np.float32)
+    total_pixels = gray.size
+    p = hist / total_pixels
     
-    for _ in range(max_iter):
-        mask1 = gray > t
-        mask2 = gray <= t
+    P = np.cumsum(p)
+    max_entropy = -1.0
+    optimal_t = 0
+    eps = 1e-10
+    
+    for t in range(1, 255):
+        p1 = P[t]
+        p2 = 1.0 - p1
         
-        m1 = np.mean(gray[mask1]) if np.any(mask1) else 0.0
-        m2 = np.mean(gray[mask2]) if np.any(mask2) else 0.0
+        if p1 < eps or p2 < eps:
+            continue
+            
+        h1 = 0.0
+        for i in range(0, t + 1):
+            if p[i] > eps:
+                val = p[i] / p1
+                h1 -= val * np.log(val)
+                
+        h2 = 0.0
+        for i in range(t + 1, 256):
+            if p[i] > eps:
+                val = p[i] / p2
+                h2 -= val * np.log(val)
+                
+        total_entropy = h1 + h2
         
-        new_t = (m1 + m2) / 2.0
-        
-        if abs(new_t - t) < tolerance:
-            t = new_t
-            break
-        t = new_t
-        
-    # Применение найденного порога
-    binary = np.where(gray > t, 255, 0).astype(np.uint8)
-    return binary, float(t)
+        if total_entropy > max_entropy:
+            max_entropy = total_entropy
+            optimal_t = t
+            
+    binary = np.where(gray > optimal_t, 255, 0).astype(np.uint8)
+    return binary, float(optimal_t)
