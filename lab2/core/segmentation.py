@@ -24,17 +24,17 @@ def detect_lines(image: np.ndarray, direction: str = 'horizontal') -> np.ndarray
         
     kernels = {
         'horizontal': np.array([[-1, -1, -1],
-                                 [ 2,  2,  2],
+                                 [2, 2, 2],
                                  [-1, -1, -1]], dtype=np.float32),
-        'vertical': np.array([[-1,  2, -1],
-                               [-1,  2, -1],
-                               [-1,  2, -1]], dtype=np.float32),
-        'diag_45': np.array([[ 2, -1, -1],
-                              [-1,  2, -1],
-                              [-1, -1,  2]], dtype=np.float32),
-        'diag_135': np.array([[-1, -1,  2],
-                               [-1,  2, -1],
-                               [ 2, -1, -1]], dtype=np.float32)
+        'vertical': np.array([[-1, 2, -1],
+                               [-1, 2, -1],
+                               [-1, 2, -1]], dtype=np.float32),
+        'diag_45': np.array([[-1, -1, 2],
+                              [-1, 2, -1],
+                              [2, -1, -1]], dtype=np.float32),
+        'diag_135': np.array([[2, -1, -1],
+                               [-1, 2, -1],
+                               [-1, -1, 2]], dtype=np.float32)
     }
     
     kernel = kernels.get(direction, kernels['horizontal'])
