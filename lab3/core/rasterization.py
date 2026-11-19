@@ -90,13 +90,16 @@ def bresenham_line(x0, y0, x1, y1):
 
 
 def bresenham_circle(xc, yc, r):
-    """Целочисленный алгоритм Брезенхема для окружности"""
+    """Целочисленный алгоритм Брезенхема для окружности (с симметрией по 8 октантам)."""
     start_time = time.perf_counter()
-    pixels = set()
 
+    if r < 0:
+        return [], (time.perf_counter() - start_time) * 1000
+
+    pixels = set()
     x = 0
-    y = r
-    e = 3 - 2 * r
+    y = int(r)
+    e = 3 - 2 * y
 
     def add_symmetric_points(cx, cy, px, py):
         points = [
@@ -110,13 +113,13 @@ def bresenham_circle(xc, yc, r):
 
     add_symmetric_points(xc, yc, x, y)
 
-    while x < y:
-        x += 1
+    while x <= y:
         if e >= 0:
-            y -= 1
             e = e + 4 * (x - y) + 10
+            y -= 1
         else:
             e = e + 4 * x + 6
+        x += 1
         add_symmetric_points(xc, yc, x, y)
 
     elapsed_time = (time.perf_counter() - start_time) * 1000
